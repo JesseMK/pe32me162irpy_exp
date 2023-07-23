@@ -2,7 +2,7 @@ pe32me162irpy_pub
 =================
 
 **Project Energy 32:** *Read electricity meter (ISKRA ME162), through
-optical port, export power usage to MQTT.*
+optical port, export power usage using MQTT.*
 
 This project contains *Python* code to read values from the
 *ISKRA ME-162 electricity meter* and push them to an *MQTT broker*.
@@ -40,12 +40,31 @@ Required hardware: a so-called optical probe.
 
 For details on infrared (IR) interfacing with the electricity meter,
 using the *IEC62056-21* protocol, I recommend browsing the `pe32me162ir_pub
-<https://github.com/wdoekes/pe32me162ir_pub>`_ source code.
+<https://github.com/wdoekes/pe32me162ir_pub>`_ README and source code.
 
 See also `pe32powerpy_pub <https://github.com/wdoekes/pe32powerpy_pub>`_
 where this project is included along with code to read Solar Panel
 output. The combined values allow for plotting near-realtime usage
 graphs.
+
+
+-------------
+MQTT messages
+-------------
+
+At the moment, the MQTT messages will look as follows.
+
+Publishes look like::
+
+    device_id=EUI48:11:22:33:44:55:66&
+      e_pos_act_energy_wh=33271493&e_neg_act_energy_wh=7784&
+      e_inst_power_w=1397&dbg_uptime=31267
+
+Where the keys mean:
+
+- e_pos_act_energy_wh (1.8.0) = Positive active energy [Wh]
+- e_neg_act_energy_wh (2.8.0) = Negative active energy [Wh]
+- e_inst_power_w (16.7.0) = Sum of active instantaneous power [Watt]
 
 
 ----
