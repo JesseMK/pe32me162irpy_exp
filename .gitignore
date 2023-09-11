@@ -1,3 +1,5 @@
 /pe32me162irpy_pub.default
 
 __pycache__
+.vscode
+.history

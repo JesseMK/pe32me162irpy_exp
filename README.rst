@@ -81,3 +81,14 @@ tools. Batteries are *not* included. You need to set up an *MQTT
 broker*, a database to store the readouts, a backend that subscribes and
 inserts the values, vacuuming/pruning code, and something to display the
 values (like *Grafana*).
+
+** Layouts **
+- 入口:  `pe32me162irpy_pub.py`<pe32me162irpy_pub.py>
+- 设备数据解析： `iec62056_sample_server.py`
+- 实时watt计算: `wattgauge.py`
+- OBIS代码和数值解析: `obis.py`
+
+** 程序流程 **
+1. 启动异步事件循环
+2. 
+2. 建立主循环，异步读取串口数据

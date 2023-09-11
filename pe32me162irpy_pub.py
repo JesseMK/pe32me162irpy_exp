@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# 项目入口
+
+
 import asyncio
 import logging
 import os
@@ -66,6 +71,9 @@ def unpack_iec6205621_datamessage(buf):
 
 
 class Pe32Me162Publisher:
+    '''
+    NOTE: publisher class， 用来配置MQTT
+    '''
     def __init__(self):
         self._mqtt_broker = os.environ.get(
             'PE32ME162_BROKER', 'test.mosquitto.org')
@@ -97,7 +105,7 @@ class Pe32Me162Publisher:
         # FIXME: retrieve task here on next publish?? that should get us
         # a nice exception then...
         asyncio.create_task(self._publish(pos_act, neg_act, inst_pwr))
-
+ 
     async def _publish(self, pos_act, neg_act, inst_pwr):
         log.debug(
             f'_publish: 1.8.0 {pos_act}, 2.8.0 {neg_act}, '
@@ -118,6 +126,7 @@ class Pe32Me162Publisher:
             f'Published: 1.8.0 {pos_act}, 2.8.0 {neg_act}, '
             f'16.7.0 {inst_pwr}')
 
+    # NOTE: 用来发布MQTT消息，如果失败则重试，最多重试3次
     async def _mqtt_publish(self, topic, payload):
         for i in (1, 2, 3):
             try:
@@ -133,8 +142,10 @@ class Pe32Me162Publisher:
             else:
                 break
 
-
 class IskraMe162ValueProcessor:
+    '''
+    Note: 用来处理电表数据，包括电表数据的解析和定时发布
+    '''
     def __init__(self, publisher=None):
         self._publisher = publisher
         self._gauge = EnergyGauge()
@@ -180,6 +191,7 @@ class IskraMe162ValueProcessor:
     def is_time_to_publish(self):
         """
         Publish every 120s or more often when there are significant changes
+        NOTE: 120s内有重大变化或者60s内有400W以上的变化，或者25s内有变化
         """
         try:
             self._last_publish
@@ -202,6 +214,7 @@ class IskraMe162ValueProcessor:
     def try_publish(self):
         """
         Called after every run; allows us to quickly push changes
+        # NOTE: 每次运行后调用，允许快速推送更改
         """
         if False:
             log.debug(
@@ -311,6 +324,9 @@ class State:
 
 
 class Iec6205621CClient:
+    '''
+    NOTE: 用来处理iec62056协议的客户端，用来和电表通信。
+    '''
     def __init__(self, devname, processor):
         self._devname = devname
         self._reader = self._writer = None
@@ -344,11 +360,17 @@ class Iec6205621CClient:
         self._writer = self._reader = None
 
     async def run(self):
+        '''
+        NOTE: 无限循环读取电表数据
+        '''
         state = State()
         while await self.loop(state):
             pass
 
     async def send(self, msg, state):
+        '''
+        NOTE: 通过调用writer.write()发送数据; 手动增加延迟
+        '''
         log.debug(f'{state}: sleep 0.020 (pre-send)')
         await asyncio.sleep(0.02)
 
@@ -367,6 +389,9 @@ class Iec6205621CClient:
         await asyncio.sleep(sleep_time)
 
     async def recv_text(self, buf, state):
+        '''
+        NOTE: 读取电表数据，直到遇到CRLF
+        '''
         "Fill buf with text (delimited by CRLF)"
         while buf[-2:] != b'\r\n':
             msg = await self._reader.read(1)
@@ -374,7 +399,10 @@ class Iec6205621CClient:
         log.debug(f'{state}: recv {bytes(buf)}')
 
     async def recv_datamessage(self, buf, state):
-        "Full buf with datamessage (ended by ETX/EOT + bcc), or empty on NAK"
+        '''
+        NOTE: 读取电表数据，直到遇到ETX/EOT + bcc
+        '''
+        "Fill buf with datamessage (ended by ETX/EOT + bcc), or empty on NAK"
         byte = await self._reader.read(1)
         log.debug(f'{state}: first byte')
         if byte == NAK:
@@ -398,6 +426,9 @@ class Iec6205621CClient:
                 assert False, 'unexpected EOT, should send NAK'
 
     async def loop(self, state):
+        '''
+        NOTE: 读取电表数据的主循环，并且根据读取的数据进行处理
+        '''
         "Does a recv/send cycle (if applicable)"
 
         # Read/fill buffer. This does not need any timeout because we
@@ -517,6 +548,9 @@ class DeadMansSwitchTripped(Exception):
 
 
 async def dead_mans_switch(processor):
+    '''
+    NOTE: 用来检测电表数据是否有变化，如果超过50s没有变化则抛出异常
+    '''
     while True:
         tdelta = processor.ms_since_last_value()
         if tdelta >= 50000:
@@ -525,8 +559,12 @@ async def dead_mans_switch(processor):
         await asyncio.sleep(1)
 
 
+# NOTE: 项目主逻辑
 async def main(serial_dev, publisher_class=Pe32Me162Publisher):
     async def cancel_tasks(tasks):
+        '''
+        NOTE: 取消任务，进行日志输出
+        '''
         log.debug(f'Checking tasks {tasks!r}')
         for task in tasks:
             if task.done():
@@ -540,12 +578,18 @@ async def main(serial_dev, publisher_class=Pe32Me162Publisher):
                 pass
 
     async with AsyncExitStack() as stack:
+        '''
+        NOTE: 异步上下文管理器（asynchronous context manager）
+        '''
         # Keep track of the asyncio tasks that we create, so that
         # we can cancel them on exit
         tasks = set()
+        # NOTE: 为了在退出时将添加到任务集合中的任务取消
         stack.push_async_callback(cancel_tasks, tasks)
-
+            
+        # NOTE: 创建publisher, 与MQTT建立连接
         publisher = publisher_class()
+        # NOTE: 为了在退出时关闭publisher，使用asyncio的上下文管理器
         await stack.enter_async_context(publisher.open())
 
         processor = IskraMe162ValueProcessor(publisher)
@@ -553,18 +597,22 @@ async def main(serial_dev, publisher_class=Pe32Me162Publisher):
         # Create Iec6205621CClient client, open connection and push
         # shutdown code.
         iec62056_client = Iec6205621CClient(serial_dev, processor)
+        # NOTE: 异步打开设备iec62056_client
         await iec62056_client.open()
+        # NOTE: 为了在退出时关闭iec62056_client，使用asyncio的上下文管理器
         stack.callback(iec62056_client.close)  # synchronous!
 
         # Start our two tasks.
         # XXX: do we need a publisher task here as well; one that can
         # die if there is something permanently wrong with the mqtt?
+        # NOTE: 创建任务
         tasks.add(asyncio.create_task(
             iec62056_client.run(), name='iec62056_client'))
         tasks.add(asyncio.create_task(
             dead_mans_switch(processor), name='dead_mans_switch'))
 
         # Execute tasks and handle exceptions.
+        # NOTE: 等待所有任务完成
         done, pending = await asyncio.wait(
             tasks, return_when=asyncio.FIRST_EXCEPTION)
         assert done
@@ -573,6 +621,7 @@ async def main(serial_dev, publisher_class=Pe32Me162Publisher):
 
 
 if __name__ == '__main__':
+    # NOTE:通过传入参数和环境变量判断程序是否在命令行中运行
     called_from_cli = (
         # Reading just JOURNAL_STREAM or INVOCATION_ID will not tell us
         # whether a user is looking at this, or whether output is passed to
@@ -580,6 +629,7 @@ if __name__ == '__main__':
         any(os.isatty(i.fileno())
             for i in (sys.stdin, sys.stdout, sys.stderr)) or
         not os.environ.get('JOURNAL_STREAM'))
+    # NOTE:配置日志输出格式
     sys.stdout.reconfigure(line_buffering=True)  # PYTHONUNBUFFERED, but better
     logging.basicConfig(
         level=(
@@ -592,10 +642,14 @@ if __name__ == '__main__':
         datefmt='%Y-%m-%d %H:%M:%S')
 
     print(f"pid {os.getpid()}: send SIGINT or SIGTERM to exit.")
+
+    # NOTE: 启动异步事件循环
     loop = asyncio.get_event_loop()
     if sys.argv[1:2]:
+        # NOTE: 从命令行参数中获取串口设备
         main_coro = main(sys.argv[1])  # '/dev/ttyAMA0' or '/dev/serial0'
     else:
+        # NOTE: 未知参数'./iec62056_sample_server.dev' maybe ./iec62056_sample_server.py?
         main_coro = main('./iec62056_sample_server.dev')
     loop.run_until_complete(main_coro)
     loop.close()
